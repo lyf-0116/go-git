@@ -23,9 +23,13 @@ var (
 		[]byte("-----BEGIN PGP MESSAGE-----"),
 	}
 	// x509SignatureFormat is the format of an X509 signature, which is
-	// a PKCS#7 (S/MIME) signature.
+	// a PKCS#7/CMS (S/MIME) signature. Git and gpgsm armor it as
+	// "SIGNED MESSAGE"; "CMS" and "PKCS7" are the conventional PEM labels
+	// emitted by other tooling (e.g. OpenSSL and go.mozilla.org/pkcs7).
 	x509SignatureFormat = signatureFormat{
 		[]byte("-----BEGIN SIGNED MESSAGE-----"),
+		[]byte("-----BEGIN CMS-----"),
+		[]byte("-----BEGIN PKCS7-----"),
 	}
 
 	// sshSignatureFormat is the format of an SSH signature.
