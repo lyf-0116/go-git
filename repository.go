@@ -454,13 +454,49 @@ func PlainOpenWithOptions(path string, o *PlainOpenOptions) (*Repository, error)
 	}
 	repositoryFs = dotgit.NewRepositoryFilesystem(dot, dotGitCommon)
 
-	s := filesystem.NewStorageWithOptions(repositoryFs, cache.NewObjectLRUDefault(), filesystem.Options{
+	var s storage.Storer = filesystem.NewStorageWithOptions(repositoryFs, cache.NewObjectLRUDefault(), filesystem.Options{
 		AlternatesFS: o.AlternatesFS,
 	})
 
+	// Confirm this is actually a git directory before applying any
+	// ownership policy. When DetectDotGit walks all the way up to the
+	// filesystem root without finding a .git entry, dot points at an
+	// existing but unrelated directory; the ownership check below must not
+	// mask the ErrRepositoryNotExists that Open would otherwise report.
+	if _, err := dot.Stat("HEAD"); err != nil {
+		closeStorage(s)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrRepositoryNotExists
+		}
+		return nil, err
+	}
+
+	safe := append([]string(nil), o.SafeDirectories...)
+	if o.TrustAll {
+		safe = append(safe, safeDirectoryAll)
+	}
+
+	roots := []string{dot.Root()}
+	if wt != nil {
+		roots = append(roots, wt.Root())
+	}
+
+	allowListed, err := verifyDirectoryOwnership(roots, safe)
+	if err != nil {
+		closeStorage(s)
+		return nil, err
+	}
+
+	// A repository that only passes through an explicit allow-list is not
+	// owned by the current user, so its local config is treated as
+	// untrusted. An owned repository is fully trusted.
+	if allowListed {
+		s = newUntrustedStorer(s, o.UntrustedConfig)
+	}
+
 	r, err := Open(s, wt)
 	if err != nil {
-		_ = s.Close()
+		closeStorage(s)
 		return nil, err
 	}
 	return r, nil
@@ -706,6 +742,18 @@ func (r *Repository) Config() (*config.Config, error) {
 // `Repository.ConfigScoped`.
 func (r *Repository) SetConfig(cfg *config.Config) error {
 	return r.Storer.SetConfig(cfg)
+}
+
+// RejectedConfig reports the sensitive local-config directives that were
+// not applied because the repository was opened as untrusted (that is,
+// access was granted through PlainOpenOptions.SafeDirectories or TrustAll
+// rather than directory ownership). It returns nil for trusted
+// repositories. Use this instead of relying on silently ignored settings.
+func (r *Repository) RejectedConfig() []config.RejectedConfig {
+	if filtered, ok := r.Storer.(*untrustedStorer); ok {
+		return filtered.RejectedConfig()
+	}
+	return nil
 }
 
 // ConfigScoped returns the repository config, merged with requested scope and

@@ -42,6 +42,12 @@ const (
 
 	// Internal traces internal go-git operations for debugging.
 	Internal
+
+	// Security traces security-relevant decisions, such as a repository
+	// being treated as untrusted because its directory owner does not match
+	// the current user, and the sensitive config directives that are
+	// rejected as a result.
+	Security
 )
 
 // SetTarget sets the tracing targets.

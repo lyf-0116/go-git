@@ -829,6 +829,27 @@ type PlainOpenOptions struct {
 	// If none is provided, it falls back to the repository's .git directory
 	// filesystem.
 	AlternatesFS billy.Filesystem
+	// SafeDirectories explicitly trusts repositories at the given absolute
+	// paths even when their directories are not owned by the current user,
+	// mirroring git's safe.directory allow-list. The special value "*"
+	// trusts every path. Entries are compared after resolving symlinks.
+	//
+	// This is the transition mechanism for containers and CI caches where a
+	// repository is often created by root and read by an unprivileged user.
+	SafeDirectories []string
+	// TrustAll disables the ownership check entirely, equivalent to
+	// safe.directory = "*". Prefer listing explicit paths in
+	// SafeDirectories.
+	TrustAll bool
+	// UntrustedConfig controls which sensitive directives are stripped from
+	// the local config of a repository that passes the check through an
+	// explicit allow-list. It has no effect on a repository owned by the
+	// current user, which is fully trusted.
+	//
+	// The zero value strips URL rewrites, credential selectors and HTTP
+	// proxy/header directives. Set individual Allow fields to retain a
+	// capability, for example local-mirror insteadOf rewrites.
+	UntrustedConfig config.UntrustedConfigOptions
 }
 
 // Validate validates the fields and sets the default values.
